@@ -231,7 +231,7 @@ class GroupContextPlugin(Star):
         # 检查是否有文本、图片或合并转发内容
         has_valid_content = False
         for comp in event.message_obj.message:
-            if isinstance(comp, Plain) or isinstance(comp, Image):
+            if isinstance(comp, (Plain, Image, Reply)):
                 has_valid_content = True
                 break
             # 合并转发消息需要立即处理，否则可能失效
@@ -304,12 +304,57 @@ class GroupContextPlugin(Star):
         """
 
         datetime_str = datetime.datetime.now().strftime("%H:%M:%S")
-        
+
         # 创建当前消息的多模态内容列表
         current_message_content = []
-        
+
+        # 检测引用回复
+        reply_info = ""
+        reply_image_urls = []  # 引用消息中的图片
+        for comp in event.message_obj.message:
+            if isinstance(comp, Reply):
+                quoted_nickname = comp.sender_nickname or "未知"
+                quoted_id = comp.sender_id or ""
+                quoted_sender = f"{quoted_nickname}({quoted_id})" if quoted_id else quoted_nickname
+                quoted_text = comp.message_str or ""
+                if not quoted_text and comp.chain:
+                    for c in comp.chain:
+                        if isinstance(c, Plain):
+                            quoted_text += c.text
+                # 从 chain 中提取图片
+                if comp.chain and self.enable_image_recognition:
+                    for c in comp.chain:
+                        if isinstance(c, Image):
+                            img_url = self._extract_image_url(c)
+                            if img_url:
+                                reply_image_urls.append(img_url)
+                                if not quoted_text:
+                                    quoted_text += "[图片]"
+                if quoted_text:
+                    reply_info = f"[回复 {quoted_sender}: \"{quoted_text}\"] "
+                else:
+                    reply_info = f"[回复 {quoted_sender}] "
+                break
+
         # 合并后的完整文本内容，只有遇到图片时才插入image_url块
-        full_text = f"[{event.message_obj.sender.nickname}/{datetime_str}]: "
+        sender = event.message_obj.sender
+        full_text = f"[{sender.nickname}({sender.user_id})/{datetime_str}]: {reply_info}"
+
+        # 处理引用消息中的图片（插入到消息内容最前面）
+        if reply_image_urls:
+            if self.image_caption:
+                for img_url in reply_image_urls:
+                    try:
+                        caption = await self.get_image_caption(img_url, self.image_caption_provider_id)
+                        # 将图片描述嵌入引用信息中
+                        full_text = full_text.replace("[图片]", f"[图片描述: {caption}]", 1)
+                    except Exception as e:
+                        logger.error(f"获取引用图片描述失败: {e}")
+            else:
+                for img_url in reply_image_urls:
+                    image_data = await self._encode_image_bs64(img_url)
+                    if image_data:
+                        current_message_content.append({"type": "image_url", "image_url": {"url": image_data}})
         
         # 1. 检测并处理合并转发消息
         if self.enable_forward_analysis and IS_AIOCQHTTP:
