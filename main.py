@@ -302,7 +302,7 @@ class GroupContextPlugin(Star):
         注意：指令消息过滤已在 on_message 中完成，这里不需要再次检查
         """
 
-        datetime_str = datetime.datetime.now().strftime("%H:%M:%S")
+        datetime_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         # Create multimodal content list for current message
         current_message_content = []
