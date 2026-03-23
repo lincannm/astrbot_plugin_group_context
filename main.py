@@ -646,10 +646,10 @@ class GroupContextPlugin(Star):
         # 获取群聊的会话轮数限制
         rounds_limit = int(self.get_cfg("conversation_rounds_limit", 10))
         
-        # 首先，清洗掉先前已经嵌入的system字段
+        # 首先，清洗掉先前已经嵌入的提示词消息
         req.contexts = [
-            ctx for ctx in req.contexts 
-            if not (ctx.get("role") == "system" and (ctx.get("content", "").startswith(self.active_reply_prompt[:30]) or ctx.get("content", "").startswith(self.normal_reply_prompt[:30])))
+            ctx for ctx in req.contexts
+            if not (ctx.get("role") == "user" and isinstance(ctx.get("content"), str) and (ctx.get("content", "").startswith(self.active_reply_prompt[:30]) or ctx.get("content", "").startswith(self.normal_reply_prompt[:30])))
         ]
 
         # 控制对话轮数
@@ -667,8 +667,8 @@ class GroupContextPlugin(Star):
         else:
             system_message = self.normal_reply_prompt
 
-        # 将 system 消息添加到上下文
-        req.contexts.append({"role": "system", "content": system_message})
+        # 将提示词以 user 角色添加到上下文（避免非首位 system 消息的兼容性问题）
+        req.contexts.append({"role": "user", "content": system_message})
 
         # Build chat history with XML structure
         combined_content = []
